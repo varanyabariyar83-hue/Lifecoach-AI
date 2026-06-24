@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a0f0d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="LifeCoach AI">
+<meta name="description" content="Your personal AI life coach — daily check-ins, trend analysis, voice recommendations.">
+<!-- PWA manifest injected inline via JS below -->
+<title>LifeCoach AI</title>
+<!--
+╔══════════════════════════════════════════════════════╗
+║         LIFECOACH AI — SINGLE FILE PWA               ║
+║  Cloudflare Worker proxy (worker.js equivalent):     ║
+║                                                      ║
+║  1. Go to dash.cloudflare.com → Workers → Create     ║
+║  2. Paste this worker code:                          ║
+║                                                      ║
+║  export default {                                    ║
+║    async fetch(request, env) {                       ║
+║      if (request.method==='OPTIONS')                 ║
+║        return new Response(null,{headers:{           ║
+║          'Access-Control-Allow-Origin':'*',          ║
+║          'Access-Control-Allow-Methods':'POST',      ║
+║          'Access-Control-Allow-Headers':'Content-Type'}}); ║
+║      const body = await request.json();              ║
+║      const res = await fetch(                        ║
+║        'https://api.groq.com/openai/v1/chat/completions',{ ║
+║        method:'POST',                                ║
+║        headers:{'Content-Type':'application/json',   ║
+║          'Authorization':`Bearer ${env.GROQ_API_KEY}`}, ║
+║        body:JSON.stringify({                         ║
+║          model:'llama-3.3-70b-versatile',            ║
+║          max_tokens:1000,                            ║
+║          messages:[{role:'system',content:body.system},...body.messages]}) ║
+║      });                                             ║
+║      const d = await res.json();                     ║
+║      const text = d.choices?.[0]?.message?.content||''; ║
+║      return new Response(JSON.stringify(             ║
+║        {content:[{type:'text',text}]}),              ║
+║        {headers:{'Content-Type':'application/json',  ║
+║          'Access-Control-Allow-Origin':'*'}});       ║
+║    }                                                 ║
+║  };                                                  ║
+║                                                      ║
+║  3. Set secret: wrangler secret put GROQ_API_KEY     ║
+║  4. Paste your Worker URL in Settings → Endpoint     ║
+╚══════════════════════════════════════════════════════╝
+-->
+<style>
+:root{--bg:#0a0f0d;--bg2:#111a15;--bg3:#172010;--card:#141c17;--card2:#1a2520;--border:rgba(45,200,120,.12);--border2:rgba(45,200,120,.22);--green:#2dc878;--green-dim:#1a7a48;--green-pale:rgba(45,200,120,.08);--gold:#c8a832;--text:#e8f2ec;--text2:#8aaa96;--text3:#4d6b57;--danger:#e05555;--font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--mono:'SF Mono','Fira Code',monospace;--radius:14px;--radius-sm:8px;--safe-top:env(safe-area-inset-top,0px);--safe-bottom:env(safe-area-inset-bottom,0px)}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{background:var(--bg);color:var(--text);font-family:var(--font);font-size:16px;line-height:1.6}
+body{min-height:100vh;min-height:100dvh;overflow-x:hidden}
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,15,13,.92);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--border);padding:calc(var(--safe-top) + 12px) 20px 12px;display:flex;align-items:center;justify-content:space-between}
+.nav-brand{display:flex;align-items:center;gap:8px}
+.nav-brand .dot{width:8px;height:8px;background:var(--green);border-radius:50%;animation:breathe 3s ease-in-out infinite}
+@keyframes breathe{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+.nav-brand span{font-size:15px;font-weight:600;letter-spacing:-.02em}
+.nav-streak{font-size:12px;color:var(--gold);font-weight:500}
+.tabs{position:fixed;bottom:0;left:0;right:0;z-index:100;background:rgba(10,15,13,.96);backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;padding-bottom:var(--safe-bottom)}
+.tab-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0;background:none;border:none;cursor:pointer;color:var(--text3);font-size:10px;font-family:var(--font);transition:color .15s}
+.tab-btn svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.5}
+.tab-btn.active{color:var(--green)}
+.main{padding-top:calc(var(--safe-top) + 60px);padding-bottom:calc(var(--safe-bottom) + 70px);min-height:100dvh}
+.page{display:none;padding:20px 16px;max-width:480px;margin:0 auto;animation:fadeIn .2s ease}
+.page.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.page-title{font-size:26px;font-weight:700;letter-spacing:-.03em;margin-bottom:4px}
+.page-sub{font-size:14px;color:var(--text2);margin-bottom:24px}
+.section-label{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card-sm{padding:12px 14px}
+.greeting-card{background:linear-gradient(135deg,#0d1f14 0%,#102318 100%);border:1px solid var(--border2);border-radius:var(--radius);padding:20px;margin-bottom:20px;position:relative;overflow:hidden}
+.greeting-card::before{content:'';position:absolute;top:-40px;right:-40px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(45,200,120,.12) 0%,transparent 70%)}
+.greeting-name{font-size:13px;color:var(--green);font-weight:500;margin-bottom:4px}
+.greeting-title{font-size:20px;font-weight:700;letter-spacing:-.02em;margin-bottom:12px}
+.streak-bar{display:flex;gap:6px}
+.streak-day{flex:1;height:4px;border-radius:2px;background:var(--border);transition:background .3s}
+.streak-day.done{background:var(--green)}
+.streak-day.today{background:var(--gold)}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px}
+.stat-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.stat-value{font-size:26px;font-weight:700;letter-spacing:-.03em}
+.stat-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.quick-checkin-btn{width:100%;padding:16px;border-radius:var(--radius);background:var(--green);border:none;cursor:pointer;color:#071209;font-size:15px;font-weight:700;font-family:var(--font);letter-spacing:-.01em;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .1s,background .15s;margin-bottom:20px}
+.quick-checkin-btn:active{transform:scale(.98);background:#25b36a}
+.recent-insight{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px}
+.insight-tag{display:inline-block;font-size:11px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--green);background:var(--green-pale);padding:3px 8px;border-radius:4px;margin-bottom:8px}
+.insight-text{font-size:14px;line-height:1.6;color:var(--text2)}
+.mood-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:20px}
+.mood-btn{aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;font-size:22px;transition:all .15s}
+.mood-btn span{font-size:10px;color:var(--text3);font-family:var(--font)}
+.mood-btn.selected{border-color:var(--green);background:var(--green-pale)}
+.slider-group{margin-bottom:16px}
+.slider-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.slider-name{font-size:13px;font-weight:500}
+.slider-val{font-size:13px;color:var(--green);font-weight:600;font-family:var(--mono)}
+input[type=range]{width:100%;height:4px;-webkit-appearance:none;appearance:none;background:var(--border);border-radius:2px;outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--green);cursor:pointer;border:2px solid var(--bg)}
+input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--green);cursor:pointer;border:2px solid var(--bg)}
+.tags-grid{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:20px}
+.tag-btn{padding:6px 12px;border-radius:20px;font-size:12px;font-weight:500;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;transition:all .15s;font-family:var(--font)}
+.tag-btn.selected{background:var(--green-pale);border-color:var(--green);color:var(--green)}
+.textarea-wrap{position:relative;margin-bottom:20px}
+.textarea-wrap textarea{width:100%;background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:var(--radius);padding:14px 44px 14px 14px;font-size:14px;font-family:var(--font);resize:none;outline:none;line-height:1.6;min-height:90px;transition:border-color .15s}
+.textarea-wrap textarea:focus{border-color:var(--border2)}
+.textarea-wrap textarea::placeholder{color:var(--text3)}
+.mic-inline{position:absolute;top:12px;right:12px;width:32px;height:32px;background:var(--card2);border:1px solid var(--border2);border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.mic-inline svg{width:16px;height:16px;stroke:var(--text2);fill:none;stroke-width:1.5}
+.mic-inline.active{background:var(--danger);border-color:var(--danger)}
+.mic-inline.active svg{stroke:white}
+.submit-btn{width:100%;padding:16px;border-radius:var(--radius);background:var(--green);border:none;cursor:pointer;color:#071209;font-size:15px;font-weight:700;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .1s;margin-bottom:16px}
+.submit-btn:active{transform:scale(.98)}
+.submit-btn:disabled{opacity:.5;cursor:not-allowed}
+.rec-card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:12px}
+.rec-card-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.rec-card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--green)}
+.rec-card-body{padding:14px;font-size:14px;line-height:1.65;color:var(--text2)}
+.rec-card-body ul{padding-left:16px}
+.rec-card-body li{margin-bottom:5px}
+.rec-card-body li::marker{color:var(--green)}
+.speak-btn{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text3);background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;cursor:pointer;font-family:var(--font);transition:all .15s}
+.speak-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.5}
+.speak-btn.speaking{color:var(--green);border-color:var(--green)}
+.trend-chart-wrap{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.trend-chart-title{font-size:13px;font-weight:600;margin-bottom:12px}
+.bar-chart{display:flex;align-items:flex-end;gap:5px;height:80px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.bar{width:100%;border-radius:3px 3px 0 0;background:var(--border);transition:height .4s ease;min-height:2px}
+.bar.energy{background:var(--green)}
+.bar.sleep{background:#5b9cf6}
+.bar.stress{background:var(--danger)}
+.bar.mood{background:var(--gold)}
+.bar-label{font-size:9px;color:var(--text3);font-family:var(--mono)}
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.legend-dot{width:8px;height:8px;border-radius:50%}
+.history-item{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.history-item:last-child{border-bottom:none}
+.history-date{font-size:11px;color:var(--text3);font-family:var(--mono);white-space:nowrap;padding-top:2px;min-width:56px}
+.history-content{flex:1}
+.history-mood{font-size:18px;margin-bottom:3px}
+.history-tags{display:flex;flex-wrap:wrap;gap:4px}
+.history-tag{font-size:10px;color:var(--text3);background:var(--bg3);border-radius:3px;padding:2px 6px}
+.history-note{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.5}
+.settings-row{display:flex;align-items:center;justify-content:space-between;padding:14px 0;border-bottom:1px solid var(--border)}
+.settings-row:last-child{border-bottom:none}
+.settings-label{font-size:14px}
+.settings-sub{font-size:12px;color:var(--text3);margin-top:2px}
+.settings-input{background:var(--card);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;font-family:var(--font);width:100%;outline:none;transition:border-color .15s;margin-top:6px}
+.settings-input:focus{border-color:var(--border2)}
+.toggle{width:40px;height:22px;background:var(--border);border-radius:11px;position:relative;cursor:pointer;transition:background .2s;border:none;flex-shrink:0}
+.toggle.on{background:var(--green)}
+.toggle::after{content:'';position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:white;transition:transform .2s}
+.toggle.on::after{transform:translateX(18px)}
+.danger-btn{width:100%;padding:12px;border-radius:var(--radius-sm);border:1px solid var(--danger);background:rgba(224,85,85,.08);color:var(--danger);font-size:14px;font-weight:600;cursor:pointer;font-family:var(--font);transition:background .15s}
+.danger-btn:hover{background:rgba(224,85,85,.15)}
+.skel{background:var(--card2);border-radius:4px;animation:shimmer 1.2s ease infinite}
+@keyframes shimmer{0%,100%{opacity:.3}50%{opacity:.7}}
+.skel-line{height:12px;margin-bottom:8px}
+.skel-line.w60{width:60%}
+.skel-line.w80{width:80%}
+.skel-line.w100{width:100%}
+.skel-card{height:80px;border-radius:var(--radius);margin-bottom:12px}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--card2);border:1px solid var(--border2);border-radius:20px;padding:10px 18px;font-size:13px;color:var(--text);z-index:1000;opacity:0;transition:all .25s;pointer-events:none;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.empty-state{text-align:center;padding:40px 20px}
+.empty-state .emoji{font-size:40px;margin-bottom:12px}
+.empty-state h3{font-size:16px;font-weight:600;margin-bottom:6px}
+.empty-state p{font-size:14px;color:var(--text2);line-height:1.5}
+select{background:var(--card2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;font-family:var(--font)}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand"><div class="dot"></div><span>LifeCoach AI</span></div>
+  <div class="nav-streak" id="navStreak">🔥 0 day streak</div>
+</nav>
+
+<main class="main">
+
+  <!-- HOME -->
+  <div class="page active" id="page-home">
+    <div class="greeting-card">
+      <div class="greeting-name" id="greetingName">Good morning</div>
+      <div class="greeting-title" id="greetingTitle">Ready for today's check-in?</div>
+      <div class="streak-bar" id="streakBar"></div>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-label">Check-ins</div><div class="stat-value" id="statCheckins">0</div><div class="stat-sub">total logged</div></div>
+      <div class="stat-card"><div class="stat-label">Avg energy</div><div class="stat-value" id="statEnergy">—</div><div class="stat-sub">last 7 days</div></div>
+      <div class="stat-card"><div class="stat-label">Avg sleep</div><div class="stat-value" id="statSleep">—</div><div class="stat-sub">hours / night</div></div>
+      <div class="stat-card"><div class="stat-label">Stress avg</div><div class="stat-value" id="statStress">—</div><div class="stat-sub">lower is better</div></div>
+    </div>
+    <button class="quick-checkin-btn" onclick="switchTab('checkin')">
+      <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+      Log today's check-in
+    </button>
+    <div class="section-label">Latest insight</div>
+    <div class="recent-insight" id="recentInsight">
+      <div class="empty-state" style="padding:20px 0">
+        <div class="emoji">🌱</div>
+        <h3>No insights yet</h3>
+        <p>Complete your first check-in to get personalized recommendations.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHECK-IN -->
+  <div class="page" id="page-checkin">
+    <div class="page-title">Daily check-in</div>
+    <div class="page-sub">Takes 60 seconds. Builds your life pattern over time.</div>
+    <div class="section-label">How are you feeling right now?</div>
+    <div class="mood-grid">
+      <button class="mood-btn" data-mood="5" onclick="selectMood(this)">😄<span>Great</span></button>
+      <button class="mood-btn" data-mood="4" onclick="selectMood(this)">🙂<span>Good</span></button>
+      <button class="mood-btn" data-mood="3" onclick="selectMood(this)">😐<span>Okay</span></button>
+      <button class="mood-btn" data-mood="2" onclick="selectMood(this)">😔<span>Low</span></button>
+      <button class="mood-btn" data-mood="1" onclick="selectMood(this)">😣<span>Bad</span></button>
+    </div>
+    <div class="section-label">Rate your day so far</div>
+    <div class="card card-sm" style="margin-bottom:16px">
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-name">⚡ Energy</span><span class="slider-val" id="valEnergy">5</span></div>
+        <input type="range" min="1" max="10" value="5" id="sliderEnergy" oninput="document.getElementById('valEnergy').textContent=this.value">
+      </div>
+      <div class="slider-group">
+        <div class="slider-header"><span class="slider-name">😴 Sleep hours</span><span class="slider-val" id="valSleep">7</span></div>
+        <input type="range" min="2" max="12" value="7" id="sliderSleep" oninput="document.getElementById('valSleep').textContent=this.value">
+      </div>
+      <div class="slider-group" style="margin-bottom:0">
+        <div class="slider-header"><span class="slider-name">🧠 Stress level</span><span class="slider-val" id="valStress">4</span></div>
+        <input type="range" min="1" max="10" value="4" id="sliderStress" oninput="document.getElementById('valStress').textContent=this.value">
+      </div>
+    </div>
+    <div class="section-label">What's affecting you today?</div>
+    <div class="tags-grid">
+      <button class="tag-btn" onclick="toggleTag(this)">Work pressure</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Poor sleep</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Skipped meals</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Exercise done</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Screen overload</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Good nutrition</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Social time</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Alone time</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Anxious thoughts</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Feeling motivated</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Physical pain</button>
+      <button class="tag-btn" onclick="toggleTag(this)">Outdoor time</button>
+    </div>
+    <div class="section-label">Anything else on your mind?</div>
+    <div class="textarea-wrap">
+      <textarea id="checkinNote" placeholder="Optional — describe how your day is going, patterns you've noticed, or anything you want your coach to know..." maxlength="500"></textarea>
+      <div class="mic-inline" id="micBtn" onclick="toggleMic()">
+        <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 19v3M8 22h8"/></svg>
+      </div>
+    </div>
+    <button class="submit-btn" id="submitBtn" onclick="submitCheckin()">
+      <svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg>
+      Get my recommendations
+    </button>
+    <div id="recResult"></div>
+  </div>
+
+  <!-- TRENDS -->
+  <div class="page" id="page-trends">
+    <div class="page-title">Your trends</div>
+    <div class="page-sub">Patterns from your check-in history.</div>
+    <div class="trend-chart-wrap">
+      <div class="trend-chart-title">Last 7 days</div>
+      <div class="bar-chart" id="barChart"></div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Energy</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#5b9cf6"></div>Sleep</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--danger)"></div>Stress</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--gold)"></div>Mood</div>
+      </div>
+    </div>
+    <div class="section-label">Check-in history</div>
+    <div id="historyList"></div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" id="page-settings">
+    <div class="page-title">Settings</div>
+    <div class="page-sub">Personalize your coaching experience.</div>
+    <div class="section-label">Your profile</div>
+    <div class="card">
+      <label style="font-size:13px;color:var(--text2);display:block;margin-bottom:4px">Your name</label>
+      <input class="settings-input" id="settingName" placeholder="How should we address you?" oninput="saveSetting('name',this.value)">
+      <div style="font-size:11px;color:var(--text3);margin-top:10px;line-height:1.5;background:var(--green-pale);border-radius:6px;padding:8px 10px;border:1px solid var(--border2)">✅ Groq API connected — no additional setup needed.</div>
+    </div>
+    <div class="section-label">Coaching preferences</div>
+    <div class="card">
+      <div class="settings-row">
+        <div><div class="settings-label">Voice readback</div><div class="settings-sub">Read recommendations aloud after check-in</div></div>
+        <button class="toggle on" id="toggleVoice" onclick="toggleSetting('voice',this)"></button>
+      </div>
+      <div class="settings-row" style="border:none">
+        <div><div class="settings-label">Coaching style</div><div class="settings-sub">Tone of your AI coach</div></div>
+        <select id="settingStyle" onchange="saveSetting('style',this.value)">
+          <option value="gentle">Gentle</option>
+          <option value="balanced" selected>Balanced</option>
+          <option value="direct">Direct</option>
+        </select>
+      </div>
+    </div>
+    <div class="section-label">Data</div>
+    <div class="card">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:12px" id="dataStats">No data yet.</div>
+      <button class="danger-btn" onclick="confirmClear()">Clear all check-in history</button>
+    </div>
+  </div>
+
+</main>
+
+<nav class="tabs">
+  <button class="tab-btn active" onclick="switchTab('home')" id="tab-home">
+    <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home
+  </button>
+  <button class="tab-btn" onclick="switchTab('checkin')" id="tab-checkin">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>Check-in
+  </button>
+  <button class="tab-btn" onclick="switchTab('trends')" id="tab-trends">
+    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Trends
+  </button>
+  <button class="tab-btn" onclick="switchTab('settings')" id="tab-settings">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings
+  </button>
+</nav>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── INLINE MANIFEST via blob ──
+(function(){
+  const m={name:"LifeCoach AI",short_name:"LifeCoach",description:"Your personal AI life coach.",start_url:"/",display:"standalone",background_color:"#0a0f0d",theme_color:"#0a0f0d",orientation:"portrait",icons:[{src:"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' fill='%230a0f0d'/%3E%3Ccircle cx='96' cy='96' r='60' fill='none' stroke='%232dc878' stroke-width='8'/%3E%3Ctext x='96' y='115' font-size='60' text-anchor='middle' fill='%232dc878'%3E❤%3C/text%3E%3C/svg%3E",sizes:"192x192",type:"image/svg+xml",purpose:"any maskable"}],categories:["health","lifestyle"],lang:"en-IN"};
+  const blob=new Blob([JSON.stringify(m)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const link=document.createElement('link');
+  link.rel='manifest';link.href=url;
+  document.head.appendChild(link);
+})();
+
+// ── INLINE SERVICE WORKER via blob ──
+(function(){
+  const swCode=`
+const CACHE='lifecoach-v1';
+self.addEventListener('install',e=>{self.skipWaiting()});
+self.addEventListener('activate',e=>{
+  e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))));
+  self.clients.claim();
+});
+self.addEventListener('fetch',e=>{
+  if(e.request.method!=='GET')return;
+  const u=new URL(e.request.url);
+  if(u.hostname.includes('anthropic')||u.hostname.includes('workers.dev')||u.hostname.includes('groq'))return;
+  e.respondWith(fetch(e.request).then(res=>{
+    const clone=res.clone();
+    caches.open(CACHE).then(c=>c.put(e.request,clone));
+    return res;
+  }).catch(()=>caches.match(e.request)));
+});`;
+  if('serviceWorker' in navigator){
+    const blob=new Blob([swCode],{type:'application/javascript'});
+    const url=URL.createObjectURL(blob);
+    navigator.serviceWorker.register(url,{scope:'/'}).catch(()=>{});
+  }
+})();
+
+// ── STATE ──
+let state={checkins:[],settings:{name:'',voice:true,style:'balanced',endpoint:''}};
+let selectedMood=null,selectedTags=[],micActive=false,recognition=null,isSpeaking=false;
+
+function load(){try{const d=localStorage.getItem('lifecoach_v2');if(d)state={...state,...JSON.parse(d)}}catch(e){}}
+function save(){localStorage.setItem('lifecoach_v2',JSON.stringify(state))}
+function saveSetting(k,v){state.settings[k]=v;save()}
+
+// ── TABS ──
+function switchTab(tab){
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('page-'+tab).classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+  if(tab==='home')renderHome();
+  if(tab==='trends')renderTrends();
+  if(tab==='settings')renderSettings();
+}
+
+// ── MOOD / TAGS ──
+function selectMood(btn){
+  document.querySelectorAll('.mood-btn').forEach(b=>b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedMood=parseInt(btn.dataset.mood);
+}
+function toggleTag(btn){
+  btn.classList.toggle('selected');
+  const tag=btn.textContent;
+  if(btn.classList.contains('selected'))selectedTags.push(tag);
+  else selectedTags=selectedTags.filter(t=>t!==tag);
+}
+
+// ── MIC ──
+function toggleMic(){
+  if(!('webkitSpeechRecognition' in window)&&!('SpeechRecognition' in window)){toast('Speech recognition not available in this browser');return}
+  if(micActive){recognition&&recognition.stop();return}
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  recognition=new SR();recognition.lang='en-IN';recognition.interimResults=false;
+  recognition.onstart=()=>{micActive=true;document.getElementById('micBtn').classList.add('active')};
+  recognition.onresult=e=>{const t=e.results[0][0].transcript;const ta=document.getElementById('checkinNote');ta.value=(ta.value?ta.value+' ':'')+t};
+  recognition.onend=()=>{micActive=false;document.getElementById('micBtn').classList.remove('active')};
+  recognition.onerror=()=>recognition.onend();
+  recognition.start();
+}
+
+// ── SPEAK (mobile-safe) ──
+function speak(text,btnId){
+  if(!window.speechSynthesis){toast('Voice not supported in this browser');return}
+  // If already speaking, stop
+  if(isSpeaking){speechSynthesis.cancel();isSpeaking=false;updateSpeakBtn(btnId,false);return}
+  const clean=text.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  // Cancel any queued utterances first
+  speechSynthesis.cancel();
+  function doSpeak(){
+    const u=new SpeechSynthesisUtterance(clean);
+    u.rate=0.88;u.pitch=1;u.volume=1;
+    // Pick best available voice for en-IN or en
+    const voices=speechSynthesis.getVoices();
+    const preferred=voices.find(v=>v.lang==='en-IN')||voices.find(v=>v.lang.startsWith('en')&&v.localService)||voices.find(v=>v.lang.startsWith('en'))||voices[0];
+    if(preferred)u.voice=preferred;
+    u.lang=preferred?preferred.lang:'en-IN';
+    u.onstart=()=>{isSpeaking=true;updateSpeakBtn(btnId,true)};
+    u.onend=()=>{isSpeaking=false;updateSpeakBtn(btnId,false)};
+    u.onerror=e=>{
+      isSpeaking=false;updateSpeakBtn(btnId,false);
+      if(e.error!=='interrupted')toast('Voice error: '+e.error+'. Try tapping Read aloud again.');
+    };
+    // Android Chrome fix: slight delay before speaking
+    setTimeout(()=>speechSynthesis.speak(u),100);
+  }
+  // Voices may not be loaded yet on mobile — wait for them
+  const voices=speechSynthesis.getVoices();
+  if(voices.length>0){doSpeak()}
+  else{
+    speechSynthesis.onvoiceschanged=()=>{speechSynthesis.onvoiceschanged=null;doSpeak()};
+    // Fallback if onvoiceschanged never fires (some Android browsers)
+    setTimeout(()=>{if(!isSpeaking)doSpeak()},500);
+  }
+}
+function updateSpeakBtn(id,active){
+  const btn=document.getElementById(id);if(!btn)return;
+  btn.classList.toggle('speaking',active);
+  btn.innerHTML=active
+    ?'<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg> Stop'
+    :'<svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg> Read aloud';
+}
+
+// ── SUBMIT ──
+async function submitCheckin(){
+  if(!selectedMood){toast('Please select how you\'re feeling first');return}
+  const energy=parseInt(document.getElementById('sliderEnergy').value);
+  const sleep=parseInt(document.getElementById('sliderSleep').value);
+  const stress=parseInt(document.getElementById('sliderStress').value);
+  const note=document.getElementById('checkinNote').value.trim();
+  const btn=document.getElementById('submitBtn');
+  btn.disabled=true;
+  btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg> Analyzing your patterns...';
+  document.getElementById('recResult').innerHTML='<div style="padding:16px 0"><div class="skel skel-line w60"></div><div class="skel skel-line w100"></div><div class="skel skel-line w80"></div><div class="skel skel-card"></div><div class="skel skel-card"></div></div>';
+
+  const recent=state.checkins.slice(-7);
+  const trendCtx=recent.length>1
+    ?`Recent trend (${recent.length} days): avg energy ${(recent.reduce((a,c)=>a+c.energy,0)/recent.length).toFixed(1)}/10, avg sleep ${(recent.reduce((a,c)=>a+c.sleep,0)/recent.length).toFixed(1)}h, avg stress ${(recent.reduce((a,c)=>a+c.stress,0)/recent.length).toFixed(1)}/10.`
+    :'First check-in — no historical trend yet.';
+
+  const moodMap={5:'great',4:'good',3:'okay',2:'low',1:'bad'};
+  const style=state.settings.style||'balanced';
+  const name=state.settings.name?state.settings.name.split(' ')[0]:'friend';
+
+  const sys=`You are an insightful, science-grounded personal life coach. Tone: ${style}. Address user as "${name}". Analyze today plus recent trend. Return ONLY this HTML, nothing else:
+<div class="rec-card"><div class="rec-card-header"><span class="rec-card-title">🔍 What I see</span></div><div class="rec-card-body">[2-3 sentences: specific observation about their pattern. Be concrete.]</div></div>
+<div class="rec-card"><div class="rec-card-header"><span class="rec-card-title">⚡ Do today</span></div><div class="rec-card-body"><ul><li>[action 1]</li><li>[action 2]</li><li>[action 3]</li></ul></div></div>
+<div class="rec-card"><div class="rec-card-header"><span class="rec-card-title">🌱 This week</span></div><div class="rec-card-body"><ul><li>[habit 1]</li><li>[habit 2]</li></ul></div></div>
+<div class="rec-card"><div class="rec-card-header"><span class="rec-card-title">💬 Coach's note</span></div><div class="rec-card-body">[1 warm personalized sentence]</div></div>`;
+
+  const msg=`Today: mood ${moodMap[selectedMood]} (${selectedMood}/5), energy ${energy}/10, sleep ${sleep}h, stress ${stress}/10, tags: ${selectedTags.join(', ')||'none'}, note: ${note||'none'}. ${trendCtx}`;
+
+  try{
+    const GROQ_KEY='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';
+    const res=await fetch('https://api.groq.com/openai/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+GROQ_KEY},
+      body:JSON.stringify({model:'llama-3.3-70b-versatile',max_tokens:1000,messages:[{role:'system',content:sys},{role:'user',content:msg}]})
+    });
+    const data=await res.json();
+    const html=data.choices?.[0]?.message?.content||'<p style="color:var(--text2)">Could not generate. Please try again.</p>';
+    const checkin={id:Date.now(),date:new Date().toISOString(),mood:selectedMood,energy,sleep,stress,tags:[...selectedTags],note,recommendation:html};
+    state.checkins.push(checkin);
+    if(state.checkins.length>90)state.checkins=state.checkins.slice(-90);
+    save();
+    const bid='spk_'+Date.now();
+    document.getElementById('recResult').innerHTML=`
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <span style="font-size:13px;color:var(--text2)">Saved ✓ (${state.checkins.length} total)</span>
+        <button class="speak-btn" id="${bid}" onclick="speak(${JSON.stringify(html)},'${bid}')">
+          <svg viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/></svg> Read aloud
+        </button>
+      </div>${html}`;
+    toast('Check-in saved!');
+    renderHome();
+  }catch(err){
+    document.getElementById('recResult').innerHTML='<div class="card" style="color:var(--danger)">Connection error. Check your endpoint in Settings and try again.</div>';
+  }
+  btn.disabled=false;
+  btn.innerHTML='<svg width="18" height="18" viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/><path d="M12 8v4l3 3"/></svg> Get my recommendations';
+}
+
+// ── RENDER HOME ──
+function renderHome(){
+  const name=state.settings.name?state.settings.name.split(' ')[0]:null;
+  const h=new Date().getHours();
+  const g=h<12?'Good morning':h<17?'Good afternoon':'Good evening';
+  document.getElementById('greetingName').textContent=name?`${g}, ${name}`:g;
+  const today=new Date().toDateString();
+  const doneToday=state.checkins.some(c=>new Date(c.date).toDateString()===today);
+  document.getElementById('greetingTitle').textContent=doneToday?"Great — you've checked in today ✓":"Ready for today's check-in?";
+  const bar=document.getElementById('streakBar');bar.innerHTML='';
+  let streak=0;
+  [...Array(7)].map((_,i)=>{const d=new Date();d.setDate(d.getDate()-(6-i));return d.toDateString()}).forEach((day,i)=>{
+    const done=state.checkins.some(c=>new Date(c.date).toDateString()===day);
+    if(done)streak++;
+    const div=document.createElement('div');
+    div.className='streak-day'+(done?(i===6?' today':' done'):'');
+    bar.appendChild(div);
+  });
+  document.getElementById('navStreak').textContent='🔥 '+streak+' day'+(streak!==1?'s':'')+' streak';
+  document.getElementById('statCheckins').textContent=state.checkins.length;
+  const l7=state.checkins.slice(-7);
+  if(l7.length){
+    document.getElementById('statEnergy').textContent=(l7.reduce((a,c)=>a+c.energy,0)/l7.length).toFixed(1);
+    document.getElementById('statSleep').textContent=(l7.reduce((a,c)=>a+c.sleep,0)/l7.length).toFixed(1);
+    document.getElementById('statStress').textContent=(l7.reduce((a,c)=>a+c.stress,0)/l7.length).toFixed(1);
+  }
+  const latest=state.checkins[state.checkins.length-1];
+  if(latest){
+    const ds=new Date(latest.date).toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'});
+    const me=['','😣','😔','😐','🙂','😄'][latest.mood];
+    document.getElementById('recentInsight').innerHTML=`
+      <div class="insight-tag">Latest · ${ds}</div>
+      <div style="font-size:18px;margin-bottom:6px">${me} Energy ${latest.energy}/10 · Sleep ${latest.sleep}h · Stress ${latest.stress}/10</div>
+      <div class="insight-text">${latest.recommendation?latest.recommendation.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').substring(0,180).trim()+'…':'No recommendation saved.'}</div>`;
+  }
+}
+
+// ── RENDER TRENDS ──
+function renderTrends(){
+  const l7=state.checkins.slice(-7);
+  const bc=document.getElementById('barChart');bc.innerHTML='';
+  if(!l7.length){bc.innerHTML='<div style="width:100%;text-align:center;color:var(--text3);font-size:13px;padding:20px 0">No data yet — start checking in daily.</div>'}
+  else{
+    l7.forEach(c=>{
+      const col=document.createElement('div');col.className='bar-col';
+      const day=new Date(c.date).toLocaleDateString('en-IN',{weekday:'short'}).substring(0,2);
+      col.innerHTML=`<div style="display:flex;flex-direction:column;align-items:center;gap:2px;height:72px;justify-content:flex-end;width:100%">
+        <div class="bar energy" style="height:${c.energy*7}px"></div>
+        <div class="bar sleep" style="height:${Math.min(c.sleep*5,70)}px"></div>
+        <div class="bar stress" style="height:${c.stress*7}px"></div>
+        <div class="bar mood" style="height:${c.mood*14}px"></div>
+      </div><div class="bar-label">${day}</div>`;
+      bc.appendChild(col);
+    });
+  }
+  const hl=document.getElementById('historyList');
+  if(!state.checkins.length){hl.innerHTML='<div class="empty-state"><div class="emoji">📋</div><h3>No history yet</h3><p>Your check-ins will appear here.</p></div>';return}
+  const me=['','😣','😔','😐','🙂','😄'];
+  const rev=[...state.checkins].reverse().slice(0,30);
+  hl.innerHTML='<div class="card card-sm">'+rev.map(c=>`
+    <div class="history-item">
+      <div class="history-date">${new Date(c.date).toLocaleDateString('en-IN',{day:'numeric',month:'short'})}<br><span style="font-size:10px">${new Date(c.date).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}</span></div>
+      <div class="history-content">
+        <div class="history-mood">${me[c.mood]} <span style="font-size:12px;color:var(--text3)">⚡${c.energy} 😴${c.sleep}h 🧠${c.stress}</span></div>
+        ${c.tags.length?`<div class="history-tags">${c.tags.map(t=>`<span class="history-tag">${t}</span>`).join('')}</div>`:''}
+        ${c.note?`<div class="history-note">${c.note.substring(0,100)}${c.note.length>100?'…':''}</div>`:''}
+      </div>
+    </div>`).join('')+'</div>';
+}
+
+// ── RENDER SETTINGS ──
+function renderSettings(){
+  document.getElementById('settingName').value=state.settings.name||'';
+
+  document.getElementById('settingStyle').value=state.settings.style||'balanced';
+  document.getElementById('toggleVoice').className='toggle'+(state.settings.voice?' on':'');
+  document.getElementById('dataStats').textContent=state.checkins.length
+    ?`${state.checkins.length} check-ins on this device. Oldest: ${new Date(state.checkins[0].date).toLocaleDateString('en-IN')}`
+    :'No data yet.';
+}
+function toggleSetting(k,btn){btn.classList.toggle('on');state.settings[k]=btn.classList.contains('on');save()}
+function confirmClear(){
+  if(confirm('Delete all '+state.checkins.length+' check-ins permanently?')){state.checkins=[];save();renderSettings();renderHome();toast('All data cleared')}
+}
+
+// ── TOAST ──
+function toast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2800)}
+
+// ── INIT ──
+load();renderHome();
+</script>
+</body>
+</html>
